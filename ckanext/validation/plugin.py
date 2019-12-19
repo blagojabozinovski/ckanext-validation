@@ -161,7 +161,7 @@ to create the database tables:
             # This is a dataset
             for resource in data_dict[u'resources']:
                 self._handle_validation_for_resource(resource)
-        else:
+        elif data_dict.get('type') == 'dataset':
             # This is a resource
             self._handle_validation_for_resource(data_dict)
 
