@@ -1,3 +1,3 @@
 ckantoolkit>=0.0.3
 goodtables==1.5.1
--e git+https://github.com/ckan/ckanext-scheming.git#egg=ckanext-scheming
+-e git+https://github.com/keitaroinc/ckanext-scheming.git@amplus-v2.0#egg=ckanext-scheming
