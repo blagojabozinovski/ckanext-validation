@@ -46,7 +46,7 @@ class TestValidationJob(object):
             'format': 'csv',
             'package_id': dataset['id'],
         }
-        print("HERE-2")
+
         run_validation_job(resource)
 
         mock_validate.assert_called_with(

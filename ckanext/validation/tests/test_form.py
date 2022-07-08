@@ -6,18 +6,23 @@ import pytest
 from bs4 import BeautifulSoup
 from six import BytesIO, ensure_binary
 
+from ckantoolkit import check_ckan_version
 from ckan.tests.factories import Sysadmin, Dataset
 from ckan.tests.helpers import (
     FunctionalTestBase, call_action
 )
+from ckan.tests import helpers
 
 from ckanext.validation.tests.helpers import (
     VALID_CSV, mock_uploads
 )
 
-NEW_RESOURCE_URL = '/dataset/{}/resource/new'
-EDIT_RESOURCE_URL = '/dataset/{}/resource/{}/edit'
-
+if check_ckan_version('2.9'):
+    NEW_RESOURCE_URL = '/dataset/{}/resource/new'
+    EDIT_RESOURCE_URL = '/dataset/{}/resource/{}/edit'
+else:
+    NEW_RESOURCE_URL = '/dataset/new_resource/{}'
+    EDIT_RESOURCE_URL = '/dataset/{}/resource_edit/{}'
 
 def _get_resource_new_page_as_sysadmin(app, id):
     env = _get_extra_env_as_sysadmin()
@@ -42,28 +47,45 @@ def _get_extra_env_as_sysadmin():
     return {'REMOTE_USER': user['name'].encode('ascii')}
 
 
+def _get_response_body(response):
+    if hasattr(response, 'text'):
+        return response.text
+    else:
+        return response.body
+
+
 def _get_form(response):
-    soup = BeautifulSoup(response.data)
+    soup = BeautifulSoup(_get_response_body(response), 'html.parser')
     return soup.find('form', id='resource-edit')
 
 
 def _post(app, url, data, resource_id='', upload=None):
+    args = []
     env = _get_extra_env_as_sysadmin()
-    if upload:
+    if upload and check_ckan_version('2.9'):
         for entry in upload:
             data[entry[0]] = (BytesIO(entry[2]), entry[1])
-
+    
     # from the form
     data['id'] = resource_id
     data['save'] = ''
 
-    kwargs = {
-         'url': url,
-         'data': data,
-         'extra_environ': env
-    }
+    if check_ckan_version('2.9'):
+        kwargs = {
+            'url': url,
+            'data': data,
+            'extra_environ': env
+        }
+    
+    else:
+        args.append(url)
+        kwargs = {
+            'params': data,
+            'extra_environ': env,
+            'upload_files': upload
+        }
 
-    return app.post(**kwargs)
+    return app.post(*args, **kwargs)
 
 
 @pytest.mark.usefixtures("clean_db", "validation_setup")
@@ -127,7 +149,7 @@ class TestResourceSchemaForm(object):
         assert dataset['resources'][0]['schema'] == value
 
     @mock_uploads
-    def test_resource_form_create_upload(self, mock_open, app):
+    def test_resource_form_create_upload(self, mock_open):
         dataset = Dataset()
         value = {
             'fields': [
@@ -141,7 +163,7 @@ class TestResourceSchemaForm(object):
         params = {
                 'url': 'https://example.com/data.csv',
             }
-
+        app = helpers._get_test_app()
         _post(app, NEW_RESOURCE_URL.format(dataset['id']),
               params, upload=[upload])
 
@@ -424,7 +446,7 @@ class TestResourceValidationOnCreateForm(FunctionalTestBase):
         pass
 
     @mock_uploads
-    def test_resource_form_create_valid(self, mock_open, app):
+    def test_resource_form_create_valid(self, mock_open):
         dataset = Dataset()
 
         upload = ('upload', 'valid.csv', VALID_CSV)
@@ -434,7 +456,7 @@ class TestResourceValidationOnCreateForm(FunctionalTestBase):
         params = {
             'url': 'https://example.com/data.csv'
         }
-
+        app = helpers._get_test_app()
         with mock.patch('io.open', return_value=valid_stream):
             _post(app, NEW_RESOURCE_URL.format(dataset['id']),
                   params, upload=[upload])
@@ -477,10 +499,10 @@ class TestResourceValidationOnUpdateForm(FunctionalTestBase):
         cfg['ckanext.validation.run_on_update_sync'] = True
 
     def setup(self):
-        pass
+        self.app = helpers._get_test_app()
 
     @mock_uploads
-    def test_resource_form_update_valid(self, mock_open, app):
+    def test_resource_form_update_valid(self, mock_open):
 
         dataset = Dataset(resources=[
             {
@@ -498,7 +520,7 @@ class TestResourceValidationOnUpdateForm(FunctionalTestBase):
         resource_id = dataset['resources'][0]['id']
 
         with mock.patch('io.open', return_value=valid_stream):
-            _post(app, EDIT_RESOURCE_URL.format(dataset['id'], resource_id),
+            _post(self.app, EDIT_RESOURCE_URL.format(dataset['id'], resource_id),
                   params, resource_id=resource_id, upload=[upload])
 
         dataset = call_action('package_show', id=dataset['id'])
