@@ -60,14 +60,14 @@ def delete_local_uploaded_file(resource_id):
         first_directory = os.path.split(path)[0]
         if first_directory.endswith(u'resources'):
             return
-        if not os.listdir(first_directory):
+        if os.listdir(first_directory) == []:
             os.rmdir(first_directory)
 
         second_directory = os.path.split(first_directory)[0]
         if second_directory.endswith(u'resources'):
             return
-        if not os.listdir(second_directory):
+        if os.listdir(second_directory) == []:
             os.rmdir(second_directory)
 
     except OSError as e:
-        log.warning(u'Error deleting uploaded file: {}'.format(e))
+        log.warning(u'Error deleting uploaded file: %s', e)

@@ -1,23 +1,22 @@
-import six
-if six.PY3:
-    import builtins
-else:
-    import __builtin__ as builtins
+from six.moves import builtins
+import cgi
 import functools
 import mock
+import six
+from six import StringIO, BytesIO
 
-from werkzeug.datastructures import FileStorage as FlaskFileStorage
 from pyfakefs import fake_filesystem
 
 import ckan.lib.uploader
+from ckan.plugins import toolkit
 from ckan.tests.helpers import change_config
 
 
-INVALID_CSV = b'''a,b,c,d
+INVALID_CSV = '''a,b,c,d
 1,2,3
 '''
 
-VALID_CSV = b'''a,b,c,d
+VALID_CSV = '''a,b,c,d
 1,2,3,4
 '''
 
@@ -144,10 +143,33 @@ def mock_uploads(func):
     return wrapper
 
 
-class MockFieldStorage(FlaskFileStorage):
-    content_type = None
+if toolkit.check_ckan_version(min_version="2.9"):
 
-    def __init__(self, stream, filename):
-        self.stream = stream
-        self.filename = filename
-        self.name = u"upload"
+    from werkzeug.datastructures import FileStorage
+
+    class MockFieldStorage(FileStorage):
+        pass
+else:
+
+    class MockFieldStorage(cgi.FieldStorage):
+
+        def __init__(self, fp, filename):
+
+            self.file = fp
+            self.filename = filename
+            self.name = 'upload'
+            self.list = None
+
+        def __bool__(self):
+            return self.file is not None
+
+
+def get_mock_file(contents):
+    if six.PY3:
+        mock_file = BytesIO()
+        mock_file.write(contents.encode('utf8'))
+    else:
+        mock_file = StringIO()
+        mock_file.write(contents)
+
+    return mock_file

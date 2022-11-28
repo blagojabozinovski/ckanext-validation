@@ -1,19 +1,13 @@
 # encoding: utf-8
-import os
+
 import logging
+import cgi
 import json
 
-from six import string_types
-
+import six
+from werkzeug.datastructures import FileStorage as FlaskFileStorage
 import ckan.plugins as p
-from ckan.lib.uploader import ALLOWED_UPLOAD_TYPES, _get_underlying_file
 import ckantoolkit as t
-
-try:
-    from ckan.lib.plugins import DefaultTranslation
-except ImportError:
-    class DefaultTranslation():
-        pass
 
 from ckanext.validation import settings
 from ckanext.validation.model import tables_exist
@@ -30,6 +24,7 @@ from ckanext.validation.helpers import (
     validation_extract_report_from_errors,
     dump_json_value,
     bootstrap_version,
+    use_webassets,
 )
 from ckanext.validation.validators import (
     resource_schema_validator,
@@ -41,16 +36,17 @@ from ckanext.validation.utils import (
 )
 from ckanext.validation.interfaces import IDataValidation
 
+if t.check_ckan_version(min_version="2.9"):
+    from ckanext.validation.plugin.flask_plugin import ValidationMixin
+else:
+    from ckanext.validation.plugin.pylons_plugin import ValidationMixin
+
+
+ALLOWED_UPLOAD_TYPES = (cgi.FieldStorage, FlaskFileStorage)
 log = logging.getLogger(__name__)
 
 
-if t.check_ckan_version(min_version='2.9.0'):
-    from ckanext.validation.plugin.flask_plugin import MixinPlugin
-else:
-    from ckanext.validation.plugin.pylons_plugin import MixinPlugin
-
-
-class ValidationPlugin(MixinPlugin, p.SingletonPlugin, DefaultTranslation):
+class ValidationPlugin(ValidationMixin):
     p.implements(p.IConfigurer)
     p.implements(p.IActions)
     p.implements(p.IAuthFunctions)
@@ -58,15 +54,6 @@ class ValidationPlugin(MixinPlugin, p.SingletonPlugin, DefaultTranslation):
     p.implements(p.IPackageController, inherit=True)
     p.implements(p.ITemplateHelpers)
     p.implements(p.IValidators)
-    p.implements(p.ITranslation, inherit=True)
-
-    # ITranslation
-    def i18n_directory(self):
-        u'''Change the directory of the .mo translation files'''
-        return os.path.join(
-            os.path.dirname(__file__),
-            '../i18n'
-        )
 
     # IConfigurer
 
@@ -82,7 +69,7 @@ to create the database tables:
 
         t.add_template_directory(config_, u'../templates')
         t.add_public_directory(config_, u'../public')
-        t.add_resource(u'../assets', 'ckanext-validation')
+        t.add_resource(u'../webassets', 'ckanext-validation')
 
     # IActions
 
@@ -119,6 +106,7 @@ to create the database tables:
             u'validation_extract_report_from_errors': validation_extract_report_from_errors,
             u'dump_json_value': dump_json_value,
             u'bootstrap_version': bootstrap_version,
+            u'use_webassets': use_webassets,
         }
 
     # IResourceController
@@ -140,12 +128,12 @@ to create the database tables:
         schema_upload = data_dict.pop(u'schema_upload', None)
         schema_url = data_dict.pop(u'schema_url', None)
         schema_json = data_dict.pop(u'schema_json', None)
-
-        if isinstance(schema_upload, ALLOWED_UPLOAD_TYPES) \
-                and schema_upload.filename:
-            data_dict[u'schema'] = _get_underlying_file(schema_upload).read()
+        if isinstance(schema_upload, ALLOWED_UPLOAD_TYPES):
+            uploaded_file = _get_underlying_file(schema_upload)
+            data_dict[u'schema'] = uploaded_file.read()
         elif schema_url:
-            if (not isinstance(schema_url, string_types) or
+
+            if (not isinstance(schema_url, six.string_types) or
                     not schema_url.lower()[:4] == u'http'):
                 raise t.ValidationError({u'schema_url': 'Must be a valid URL'})
             data_dict[u'schema'] = schema_url
@@ -158,6 +146,7 @@ to create the database tables:
         return self._process_schema_fields(data_dict)
 
     resources_to_validate = {}
+    packages_to_skip = {}
 
     def after_create(self, context, data_dict):
 
@@ -200,7 +189,7 @@ to create the database tables:
 
             for plugin in p.PluginImplementations(IDataValidation):
                 if not plugin.can_validate(context, resource):
-                    log.debug('Skipping validation for resource {}'.format(resource['id']))
+                    log.debug('Skipping validation for resource %s', resource['id'])
                     return
 
             _run_async_validation(resource[u'id'])
@@ -208,6 +197,15 @@ to create the database tables:
     def before_update(self, context, current_resource, updated_resource):
 
         updated_resource = self._process_schema_fields(updated_resource)
+
+        # the call originates from a resource API, so don't validate the entire package
+        package_id = updated_resource.get('package_id')
+        if not package_id:
+            existing_resource = t.get_action('resource_show')(
+                context={'ignore_auth': True}, data_dict={'id': updated_resource['id']})
+            if existing_resource:
+                package_id = existing_resource['package_id']
+        self.packages_to_skip[package_id] = True
 
         if not get_update_mode_from_config() == u'async':
             return updated_resource
@@ -254,6 +252,13 @@ to create the database tables:
             return
 
         if is_dataset:
+            package_id = data_dict.get('id')
+            if self.packages_to_skip.pop(package_id, None) or context.get('save', False):
+                # Either we're updating an individual resource,
+                # or we're updating the package metadata via the web form;
+                # in both cases, we don't need to validate every resource.
+                return
+
             for resource in data_dict.get(u'resources', []):
                 if resource[u'id'] in self.resources_to_validate:
                     # This is part of a resource_update call, it will be
@@ -271,7 +276,7 @@ to create the database tables:
             if resource_id in self.resources_to_validate:
                 for plugin in p.PluginImplementations(IDataValidation):
                     if not plugin.can_validate(context, data_dict):
-                        log.debug('Skipping validation for resource {}'.format(data_dict['id']))
+                        log.debug('Skipping validation for resource %s', data_dict['id'])
                         return
 
                 del self.resources_to_validate[resource_id]
@@ -311,5 +316,11 @@ def _run_async_validation(resource_id):
              u'async': True})
     except t.ValidationError as e:
         log.warning(
-            u'Could not run validation for resource {}: {}'.format(
-                resource_id, str(e)))
+            u'Could not run validation for resource %s: %s',
+                resource_id, e)
+
+def _get_underlying_file(wrapper):
+    if isinstance(wrapper, FlaskFileStorage):
+        return wrapper.stream
+    return wrapper.file
+

@@ -14,5 +14,9 @@
   </div>
 </div>
 
-{% set type = 'asset' if h.ckan_version().split('.')[1] | int >= 9 else 'resource' %}
-{% include 'validation/snippets/validation_report_form_' ~ type ~ '.html' %}
+{% if h.use_webassets() %}
+    {% snippet 'validation/snippets/validation_asset.html', name='ckanext-validation/report-form-css' %}
+    {% snippet 'validation/snippets/validation_asset.html', name='ckanext-validation/report-form-js' %}
+{% else %}
+    {% snippet 'validation/snippets/validation_resource.html', name='ckanext-validation/report-form' %}
+{% endif %}

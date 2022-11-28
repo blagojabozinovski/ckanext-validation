@@ -2,66 +2,66 @@ import os
 import uuid
 import mock
 
+import pytest
 from pyfakefs import fake_filesystem_unittest
-
-from ckan.tests.helpers import change_config
 
 from ckanext.validation.tests.helpers import mock_uploads
 from ckanext.validation.utils import (
-    get_create_mode_from_config, get_update_mode_from_config,
-    get_local_upload_path, delete_local_uploaded_file
+    get_create_mode_from_config,
+    get_update_mode_from_config,
+    get_local_upload_path,
+    delete_local_uploaded_file,
 )
 
 
 class TestConfig(object):
-
     def test_config_defaults(self):
 
-        assert get_update_mode_from_config() == 'async'
-        assert get_create_mode_from_config() == 'async'
+        assert get_update_mode_from_config() == "async"
+        assert get_create_mode_from_config() == "async"
 
-    @change_config('ckanext.validation.run_on_update_sync', True)
+    @pytest.mark.ckan_config("ckanext.validation.run_on_update_sync", True)
     def test_config_update_true_sync(self):
 
-        assert get_update_mode_from_config() == 'sync'
+        assert get_update_mode_from_config() == "sync"
 
-    @change_config('ckanext.validation.run_on_update_sync', False)
+    @pytest.mark.ckan_config("ckanext.validation.run_on_update_sync", False)
     def test_config_update_false_sync(self):
 
-        assert get_update_mode_from_config() == 'async'
+        assert get_update_mode_from_config() == "async"
 
-    @change_config('ckanext.validation.run_on_create_sync', True)
+    @pytest.mark.ckan_config("ckanext.validation.run_on_create_sync", True)
     def test_config_create_true_sync(self):
 
-        assert get_create_mode_from_config() == 'sync'
+        assert get_create_mode_from_config() == "sync"
 
-    @change_config('ckanext.validation.run_on_create_sync', False)
+    @pytest.mark.ckan_config("ckanext.validation.run_on_create_sync", False)
     def test_config_create_false_sync(self):
 
-        assert get_create_mode_from_config() == 'async'
+        assert get_create_mode_from_config() == "async"
 
-    @change_config('ckanext.validation.run_on_update_async', True)
+    @pytest.mark.ckan_config("ckanext.validation.run_on_update_async", True)
     def test_config_update_true_async(self):
 
-        assert get_update_mode_from_config() == 'async'
+        assert get_update_mode_from_config() == "async"
 
-    @change_config('ckanext.validation.run_on_update_async', False)
+    @pytest.mark.ckan_config("ckanext.validation.run_on_update_async", False)
     def test_config_update_false_async(self):
 
         assert get_update_mode_from_config() is None
 
-    @change_config('ckanext.validation.run_on_create_async', True)
+    @pytest.mark.ckan_config("ckanext.validation.run_on_create_async", True)
     def test_config_create_true_async(self):
 
-        assert get_create_mode_from_config() == 'async'
+        assert get_create_mode_from_config() == "async"
 
-    @change_config('ckanext.validation.run_on_create_async', False)
+    @pytest.mark.ckan_config("ckanext.validation.run_on_create_async", False)
     def test_config_create_false_async(self):
 
         assert get_create_mode_from_config() is None
 
-    @change_config('ckanext.validation.run_on_update_async', False)
-    @change_config('ckanext.validation.run_on_create_async', False)
+    @pytest.mark.ckan_config("ckanext.validation.run_on_update_async", False)
+    @pytest.mark.ckan_config("ckanext.validation.run_on_create_async", False)
     def test_config_both_false(self):
 
         assert get_update_mode_from_config() is None
@@ -69,21 +69,22 @@ class TestConfig(object):
 
 
 class TestFiles(object):
-
     @mock_uploads
     def test_local_path(self, mock_open):
 
         resource_id = str(uuid.uuid4())
 
-        assert get_local_upload_path(resource_id) ==\
-               '/doesnt_exist/resources/{}/{}/{}'.format(
-                   resource_id[0:3], resource_id[3:6], resource_id[6:])
+        assert get_local_upload_path(
+            resource_id
+        ) == "/doesnt_exist/resources/{}/{}/{}".format(
+            resource_id[0:3], resource_id[3:6], resource_id[6:]
+        )
 
     @mock_uploads
     def test_delete_upload_file(self, mock_open):
 
         resource_id = str(uuid.uuid4())
-        path = '/doesnt_exist/resources/{}/{}/{}'.format(
+        path = "/doesnt_exist/resources/{}/{}/{}".format(
             resource_id[0:3], resource_id[3:6], resource_id[6:]
         )
 
@@ -103,19 +104,20 @@ class TestFiles(object):
     def test_delete_file_not_deleted_if_resources_first(self, mock_open):
 
         resource_id = str(uuid.uuid4())
-        path = '/doesnt_exist/resources/{}'.format(resource_id)
+        path = "/doesnt_exist/resources/{}".format(resource_id)
 
         patcher = fake_filesystem_unittest.Patcher()
         patcher.setUp()
         patcher.fs.CreateFile(path)
 
         assert os.path.exists(path)
-        with mock.patch('ckanext.validation.utils.get_local_upload_path',
-                        return_value=path):
+        with mock.patch(
+            "ckanext.validation.utils.get_local_upload_path", return_value=path
+        ):
             delete_local_uploaded_file(resource_id)
 
         assert not os.path.exists(path)
-        assert os.path.exists('/doesnt_exist/resources')
+        assert os.path.exists("/doesnt_exist/resources")
 
         patcher.tearDown()
 
@@ -123,19 +125,20 @@ class TestFiles(object):
     def test_delete_file_not_deleted_if_resources_second(self, mock_open):
 
         resource_id = str(uuid.uuid4())
-        path = '/doesnt_exist/resources/data/{}'.format(resource_id)
+        path = "/doesnt_exist/resources/data/{}".format(resource_id)
 
         patcher = fake_filesystem_unittest.Patcher()
         patcher.setUp()
         patcher.fs.CreateFile(path)
 
         assert os.path.exists(path)
-        with mock.patch('ckanext.validation.utils.get_local_upload_path',
-                        return_value=path):
+        with mock.patch(
+            "ckanext.validation.utils.get_local_upload_path", return_value=path
+        ):
             delete_local_uploaded_file(resource_id)
 
         assert not os.path.exists(path)
-        assert os.path.exists('/doesnt_exist/resources')
+        assert os.path.exists("/doesnt_exist/resources")
 
         patcher.tearDown()
 
@@ -143,7 +146,7 @@ class TestFiles(object):
     def test_delete_passes_if_os_exeception(self, mock_open):
 
         resource_id = str(uuid.uuid4())
-        path = '/doesnt_exist/resources/{}/{}/{}'.format(
+        path = "/doesnt_exist/resources/{}/{}/{}".format(
             resource_id[0:3], resource_id[3:6], resource_id[6:]
         )
 
@@ -152,8 +155,7 @@ class TestFiles(object):
         patcher.fs.CreateFile(path)
 
         assert os.path.exists(path)
-        with mock.patch('ckanext.validation.utils.os.remove',
-                        side_effect=OSError):
+        with mock.patch("ckanext.validation.utils.os.remove", side_effect=OSError):
 
             delete_local_uploaded_file(resource_id)
 

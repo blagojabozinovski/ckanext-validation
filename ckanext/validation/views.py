@@ -1,19 +1,47 @@
-import logging
+# encoding: utf-8
 
 from flask import Blueprint
 
-import ckanext.validation.common as common
+from ckantoolkit import (
+    c, NotAuthorized, ObjectNotFound,
+    abort, _, render, get_action)
 
-log = logging.getLogger(__name__)
-validation = Blueprint(u'validation', __name__)
-
-
-def read(id, resource_id):
-    return common.validation(resource_id)
+validation = Blueprint("service_proxy", __name__)
 
 
-validation.add_url_rule(u'/dataset/<id>/resource/<resource_id>/validation', view_func=read)
+def validation_read(self, id, resource_id):
+
+    try:
+        validation = get_action(u'resource_validation_show')(
+            {u'user': c.user},
+            {u'resource_id': resource_id})
+
+        resource = get_action(u'resource_show')(
+            {u'user': c.user},
+            {u'id': resource_id})
+
+        dataset = get_action(u'package_show')(
+            {u'user': c.user},
+            {u'id': resource[u'package_id']})
+
+        # Needed for core resource templates
+        c.package = c.pkg_dict = dataset
+        c.resource = resource
+
+        return render(u'validation/validation_read.html', extra_vars={
+            u'validation': validation,
+            u'resource': resource,
+            u'dataset': dataset,
+        })
+
+    except NotAuthorized:
+        abort(403, _(u'Unauthorized to read this validation report'))
+    except ObjectNotFound:
+
+        abort(404, _(u'No validation report exists for this resource'))
 
 
-def get_blueprints():
-    return [validation]
+validation.add_url_rule(
+    '/dataset/{id}/resource/{resource_id}/validation',
+    view_func=validation_read
+)

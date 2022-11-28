@@ -4,8 +4,8 @@ import datetime
 import logging
 import json
 
+import six
 from sqlalchemy.orm.exc import NoResultFound
-from six import string_types
 
 import ckan.plugins as plugins
 import ckan.lib.uploader as uploader
@@ -263,18 +263,18 @@ def resource_validation_run_batch(context, data_dict):
     count_resources = 0
 
     dataset_ids = data_dict.get('dataset_ids')
-    if isinstance(dataset_ids, string_types):
+    if isinstance(dataset_ids, six.string_types):
         try:
             dataset_ids = json.loads(dataset_ids)
         except ValueError as e:
             dataset_ids = [dataset_ids]
 
     search_params = data_dict.get('query')
-    if isinstance(search_params, string_types):
+    if isinstance(search_params, six.string_types):
         try:
             search_params = json.loads(search_params)
         except ValueError as e:
-            msg = 'Error parsing search parameters'
+            msg = 'Error parsing search parameters'.format(search_params)
             return {'output': msg}
 
     while True:
@@ -310,9 +310,9 @@ def resource_validation_run_batch(context, data_dict):
 
                     except t.ValidationError as e:
                         log.warning(
-                            u'Could not run validation for resource {} '.format(resource['id']) +
-                            u'from dataset {}: {}'.format(
-                                dataset['name'], str(e)))
+                            u'Could not run validation for resource %s ' +
+                            u'from dataset %s: %s',
+                                resource['id'], dataset['name'], e)
 
             if len(query['results']) < page_size:
                 break
@@ -481,14 +481,13 @@ def resource_create(context, data_dict):
                   uploader.get_max_resource_size())
 
     # Custom code starts
-
     if get_create_mode_from_config() == u'sync':
 
         run_validation = True
 
         for plugin in plugins.PluginImplementations(IDataValidation):
             if not plugin.can_validate(context, data_dict):
-                log.debug('Skipping validation for resource {}'.format(resource_id))
+                log.debug('Skipping validation for resource %s', resource_id)
                 run_validation = False
 
         if run_validation:
@@ -604,7 +603,7 @@ def resource_update(context, data_dict):
         run_validation = True
         for plugin in plugins.PluginImplementations(IDataValidation):
             if not plugin.can_validate(context, data_dict):
-                log.debug('Skipping validation for resource {}'.format(id))
+                log.debug('Skipping validation for resource %s', id)
                 run_validation = False
 
         if run_validation:
@@ -643,8 +642,8 @@ def _run_sync_validation(resource_id, local_upload=False, new_resource=True):
              u'async': False})
     except t.ValidationError as e:
         log.info(
-            u'Could not run validation for resource {}: {}'.format(
-                resource_id, str(e)))
+            u'Could not run validation for resource %s: %s',
+                resource_id, e)
         return
 
     validation = t.get_action(u'resource_validation_show')(

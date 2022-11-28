@@ -1,9 +1,7 @@
-# -*- coding: utf-8 -*-
-
-import ckan.plugins as p
+from ckan import plugins as p
 
 
-class MixinPlugin(p.SingletonPlugin):
+class ValidationMixin(p.SingletonPlugin):
     p.implements(p.IRoutes, inherit=True)
 
     # IRoutes

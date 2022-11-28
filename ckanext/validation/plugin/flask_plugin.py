@@ -1,20 +1,20 @@
 # -*- coding: utf-8 -*-
 
-import ckan.plugins as p
-import ckanext.validation.cli as cli
-import ckanext.validation.views as views
+from ckan import plugins as p
+
+from ckanext.validation import blueprints, cli
 
 
-class MixinPlugin(p.SingletonPlugin):
-    p.implements(p.IClick)
+class ValidationMixin(p.SingletonPlugin):
     p.implements(p.IBlueprint)
-
-    # IClick
-
-    def get_commands(self):
-        return cli.get_commands()
+    p.implements(p.IClick)
 
     # IBlueprint
 
     def get_blueprint(self):
-        return views.get_blueprints()
+        return [blueprints.validation]
+
+    # IClick
+
+    def get_commands(self):
+        return [cli.validation]

@@ -6,8 +6,11 @@
   {{ h.get_validation_badge(res)|safe }}
   </h1>
 
-  {% set type = 'asset' if h.ckan_version().split('.')[1] | int >= 9 else 'resource' %}
-  {% include 'validation/snippets/validation_style_' ~ type ~ '.html' %}
+  {% if h.use_webassets() %}
+      {% snippet 'validation/snippets/validation_asset.html', name='ckanext-validation/validation-css' %}
+  {% else %}
+      {% snippet 'validation/snippets/validation_resource.html', name='ckanext-validation/main' %}
+  {% endif %}
 
 {% endblock %}
 

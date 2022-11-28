@@ -1,8 +1,5 @@
-{% set type = 'asset' if h.ckan_version().split('.')[1] | int >= 9 else 'resource' %}
-
-{% include 'validation/snippets/validation_style_' ~ type ~ '.html' %}
-
 {% extends "package/base.html" %}
+
 
 {%- block subtitle %}{{ _('Validation Report') }}{% endblock -%}
 
@@ -10,11 +7,7 @@
 {% block breadcrumb_content %}
   {{ super() }}
 
-  {% if h.ckan_version().split('.')[1] | int >= 9 %}
-    <li><a href="{{ h.url_for('dataset_resource.read', id=pkg_dict.id, resource_id=resource.id ) }}">{{ h.resource_display_name(resource)|truncate(30) }}</a></li>
-  {% else %}
-    <li><a href="{{ h.url_for(controller='package', action='resource_read', id=pkg_dict.id, resource_id=resource.id ) }}">{{ h.resource_display_name(resource)|truncate(30) }}</a></li>
-  {% endif %}
+  <li><a href="{{ h.url_for('resource.read', id=dataset.id, resource_id=resource.id ) }}">{{ h.resource_display_name(resource)|truncate(30) }}</a></li>
   <li class="active"><a href="">Validation Report</a></li>
 {% endblock %}
 
@@ -41,11 +34,14 @@
             <div id="report" {% if h.bootstrap_version() == '2' %}class="bs2"{% endif %} data-module="validation-report" data-module-report="{{ h.dump_json_value(validation.report) }}"></div>
         {% endif %}
 
-        </div>
       </div>
     </section>
-
-   {% include 'validation/snippets/validation_report_' ~ type ~ '.html' %}
+{% if h.use_webassets() %}
+    {% snippet 'validation/snippets/validation_asset.html', name='ckanext-validation/report-css' %}
+    {% snippet 'validation/snippets/validation_asset.html', name='ckanext-validation/report-js' %}
+{% else %}
+    {% snippet 'validation/snippets/validation_resource.html', name='ckanext-validation/report' %}
+{% endif %}
 
 {% endblock %}
 
