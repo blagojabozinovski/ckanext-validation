@@ -28,7 +28,7 @@ setup(
     classifiers=[
         # How mature is this project? Common values are
         # 3 - Alpha
-        # 4 - Beta
+        # 4 
         # 5 - Production/Stable
         'Development Status :: 4 - Beta',
 
