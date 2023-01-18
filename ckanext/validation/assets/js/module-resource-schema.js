@@ -99,7 +99,7 @@ this.ckan.module('resource-schema', function($) {
         .insertBefore(this.field_url_input);
 
       // Button for resetting the form when there is a JSON text set
-      $('<a href="javascript:;" class="btn btn-default btn-remove-url">'
+      $('<a href="javascript:;" id="json_schema_clear_button" class="btn btn-default btn-remove-url">'
         + removeText + '</a>')
         .prop('title', removeText)
         .on('click', this._onRemoveJSON)
