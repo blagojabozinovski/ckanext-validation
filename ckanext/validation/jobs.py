@@ -9,6 +9,7 @@ import requests
 from sqlalchemy.orm.exc import NoResultFound
 from goodtables import validate
 
+from ckan.common import config
 from ckan.model import Session
 import ckan.lib.uploader as uploader
 
@@ -72,10 +73,11 @@ def run_validation_job(resource):
                 })
 
                 options[u'http_session'] = s
-
+    
     if not source:
         source = resource[u'url']
-
+        source = source.replace(config.get('ckan.site_url'), "http://localhost:5000")
+    
     schema = resource.get(u'schema')
     if schema and isinstance(schema, str):
         if schema.startswith('http'):
@@ -127,7 +129,9 @@ def _validate_table(source, _format=u'csv', schema=None, **options):
         log.debug(u'Download resource for validation via proxy: %s', proxy)
         http_session.proxies.update({'http': proxy, 'https': proxy})
     report = validate(source, format=_format, schema=schema, http_session=http_session, **options)
-
+    print("======================================")
+    print(source)
+    print("======================================")
     log.debug(u'Validating source: %s', source)
 
     return report
