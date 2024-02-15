@@ -129,9 +129,6 @@ def _validate_table(source, _format=u'csv', schema=None, **options):
         log.debug(u'Download resource for validation via proxy: %s', proxy)
         http_session.proxies.update({'http': proxy, 'https': proxy})
     report = validate(source, format=_format, schema=schema, http_session=http_session, **options)
-    print("======================================")
-    print(source)
-    print("======================================")
     log.debug(u'Validating source: %s', source)
 
     return report

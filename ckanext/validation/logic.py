@@ -82,15 +82,6 @@ def resource_validation_run(context, data_dict):
     '''
 
     t.check_access(u'resource_validation_run', context, data_dict)
-    print("==================show_badges_in_listings=====logic.py============================")
-    print(config.get('ckanext.validation.show_badges_in_listings'))
-    print("===================show_badges_in_listings=====logic.py===========================")
-    print("==================pass_auth_header=========logic.py========================")
-    print(config.get('ckanext.validation.pass_auth_header'))
-    print("===================pass_auth_header==========logic.py======================")
-    print("==================pass_auth_header_value=========logic.py========================")
-    print(config.get('ckanext.validation.pass_auth_header_value'))
-    print("===================pass_auth_header_value==========logic.pyy======================")
 
     if not data_dict.get(u'resource_id'):
         raise t.ValidationError({u'resource_id': u'Missing value'})

@@ -130,9 +130,6 @@ def _process_row(dataset, resource, writer):
         # config['ckan.site_url'],
         dataset['name'],
         resource['id'])
-    print("==============================================")
-    print(resource_url)
-    print("==============================================")
     validation_url = resource_url + '/validation'
 
     writer.writerow({
@@ -157,9 +154,6 @@ def _process_row_full(dataset, resource, writer):
         # config['ckan.site_url'],
         dataset['name'],
         resource['id'])
-    print("==============================================")
-    print(resource_url)
-    print("==============================================")
 
     # Get validation report
     validation = get_action('resource_validation_show')(
