@@ -41,6 +41,8 @@ from ckanext.validation import blueprints, cli
 ALLOWED_UPLOAD_TYPES = (cgi.FieldStorage, FlaskFileStorage)
 log = logging.getLogger(__name__)
 
+ckan_2_10 = t.check_ckan_version(min_version="2.10")
+
 
 class ValidationPlugin(p.SingletonPlugin):
     p.implements(p.IConfigurer)
@@ -152,29 +154,36 @@ to create the database tables:
             data_dict[u'schema'] = schema_json
 
         return data_dict
+    
+    if ckan_2_10:
+        pass
+    else: 
+        def before_create(self, context, data_dict):
 
-    def before_create(self, context, data_dict):
+            is_dataset = self._data_dict_is_dataset(data_dict)
+            if not is_dataset:
+                context["_resource_create_call"] = True
+                return self._process_schema_fields(data_dict)
 
-        is_dataset = self._data_dict_is_dataset(data_dict)
-        if not is_dataset:
-            context["_resource_create_call"] = True
-            return self._process_schema_fields(data_dict)
+    
+    if ckan_2_10:
+        pass
+    else:
+        def after_create(self, context, data_dict):
 
-    def after_create(self, context, data_dict):
+            is_dataset = self._data_dict_is_dataset(data_dict)
 
-        is_dataset = self._data_dict_is_dataset(data_dict)
+            if not get_create_mode_from_config() == u'async':
+                return
 
-        if not get_create_mode_from_config() == u'async':
-            return
-
-        if is_dataset:
-            for resource in data_dict.get(u'resources', []):
-                self._handle_validation_for_resource(context, resource)
-        else:
-            # This is a resource. Resources don't need to be handled here
-            # as there is always a previous `package_update` call that will
-            # trigger the `before_update` and `after_update` hooks
-            pass
+            if is_dataset:
+                for resource in data_dict.get(u'resources', []):
+                    self._handle_validation_for_resource(context, resource)
+            else:
+                # This is a resource. Resources don't need to be handled here
+                # as there is always a previous `package_update` call that will
+                # trigger the `before_update` and `after_update` hooks
+                pass
 
     def _data_dict_is_dataset(self, data_dict):
         return (
@@ -206,102 +215,108 @@ to create the database tables:
 
             _run_async_validation(resource[u'id'])
 
-    def before_update(self, context, current_resource, updated_resource):
+    if ckan_2_10:
+        pass
+    else:
+        def before_update(self, context, current_resource, updated_resource):
 
-        updated_resource = self._process_schema_fields(updated_resource)
+            updated_resource = self._process_schema_fields(updated_resource)
 
-        # the call originates from a resource API, so don't validate the entire package
-        package_id = updated_resource.get('package_id')
-        if not package_id:
-            existing_resource = t.get_action('resource_show')(
-                context={'ignore_auth': True}, data_dict={'id': updated_resource['id']})
-            if existing_resource:
-                package_id = existing_resource['package_id']
-        self.packages_to_skip[package_id] = True
+            # the call originates from a resource API, so don't validate the entire package
+            package_id = updated_resource.get('package_id')
+            if not package_id:
+                existing_resource = t.get_action('resource_show')(
+                    context={'ignore_auth': True}, data_dict={'id': updated_resource['id']})
+                if existing_resource:
+                    package_id = existing_resource['package_id']
+            self.packages_to_skip[package_id] = True
 
-        if not get_update_mode_from_config() == u'async':
+            if not get_update_mode_from_config() == u'async':
+                return updated_resource
+
+            needs_validation = False
+            if ((
+                # New file uploaded
+                updated_resource.get(u'upload') or
+                # External URL changed
+                updated_resource.get(u'url') != current_resource.get(u'url') or
+                # Schema changed
+                (updated_resource.get(u'schema') !=
+                current_resource.get(u'schema')) or
+                # Format changed
+                (updated_resource.get(u'format', u'').lower() !=
+                current_resource.get(u'format', u'').lower())
+                ) and (
+                # Make sure format is supported
+                updated_resource.get(u'format', u'').lower() in
+                    settings.SUPPORTED_FORMATS
+                    )):
+                needs_validation = True
+
+            if needs_validation:
+                self.resources_to_validate[updated_resource[u'id']] = True
+
             return updated_resource
 
-        needs_validation = False
-        if ((
-            # New file uploaded
-            updated_resource.get(u'upload') or
-            # External URL changed
-            updated_resource.get(u'url') != current_resource.get(u'url') or
-            # Schema changed
-            (updated_resource.get(u'schema') !=
-             current_resource.get(u'schema')) or
-            # Format changed
-            (updated_resource.get(u'format', u'').lower() !=
-             current_resource.get(u'format', u'').lower())
-            ) and (
-            # Make sure format is supported
-            updated_resource.get(u'format', u'').lower() in
-                settings.SUPPORTED_FORMATS
-                )):
-            needs_validation = True
+    if ckan_2_10:
+        pass
+    else:
+        def after_update(self, context, data_dict):
 
-        if needs_validation:
-            self.resources_to_validate[updated_resource[u'id']] = True
+            is_dataset = self._data_dict_is_dataset(data_dict)
 
-        return updated_resource
-
-    def after_update(self, context, data_dict):
-
-        is_dataset = self._data_dict_is_dataset(data_dict)
-
-        # Need to allow create as well because resource_create calls
-        # package_update
-        if (not get_update_mode_from_config() == u'async'
-                and not get_create_mode_from_config() == u'async'):
-            return
-
-        if context.get('_validation_performed'):
-            # Ugly, but needed to avoid circular loops caused by the
-            # validation job calling resource_patch (which calls
-            # package_update)
-            del context['_validation_performed']
-            return
-
-        if is_dataset:
-            package_id = data_dict.get('id')
-            if self.packages_to_skip.pop(package_id, None) or context.get('save', False):
-                # Either we're updating an individual resource,
-                # or we're updating the package metadata via the web form;
-                # in both cases, we don't need to validate every resource.
+            # Need to allow create as well because resource_create calls
+            # package_update
+            if (not get_update_mode_from_config() == u'async'
+                    and not get_create_mode_from_config() == u'async'):
                 return
 
-            if context.pop("_resource_create_call", False):
-                new_resource = data_dict["resources"][-1]
-                if new_resource:
-                    # This is part of a resource_create call, we only need to validate
-                    # the new resource being created
-                    self._handle_validation_for_resource(context, new_resource)
+            if context.get('_validation_performed'):
+                # Ugly, but needed to avoid circular loops caused by the
+                # validation job calling resource_patch (which calls
+                # package_update)
+                del context['_validation_performed']
+                return
+
+            if is_dataset:
+                package_id = data_dict.get('id')
+                if self.packages_to_skip.pop(package_id, None) or context.get('save', False):
+                    # Either we're updating an individual resource,
+                    # or we're updating the package metadata via the web form;
+                    # in both cases, we don't need to validate every resource.
                     return
 
-            for resource in data_dict.get(u'resources', []):
-                if resource[u'id'] in self.resources_to_validate:
-                    # This is part of a resource_update call, it will be
-                    # handled on the next `after_update` call
-                    continue
-                else:
-                    # This is an actual package_update call, validate the
-                    # resources if necessary
-                    self._handle_validation_for_resource(context, resource)
-
-        else:
-            # This is a resource
-            resource_id = data_dict[u'id']
-
-            if resource_id in self.resources_to_validate:
-                for plugin in p.PluginImplementations(IDataValidation):
-                    if not plugin.can_validate(context, data_dict):
-                        log.debug('Skipping validation for resource %s', data_dict['id'])
+                if context.pop("_resource_create_call", False):
+                    new_resource = data_dict["resources"][-1]
+                    if new_resource:
+                        # This is part of a resource_create call, we only need to validate
+                        # the new resource being created
+                        self._handle_validation_for_resource(context, new_resource)
                         return
 
-                del self.resources_to_validate[resource_id]
+                for resource in data_dict.get(u'resources', []):
+                    if resource[u'id'] in self.resources_to_validate:
+                        # This is part of a resource_update call, it will be
+                        # handled on the next `after_update` call
+                        continue
+                    else:
+                        # This is an actual package_update call, validate the
+                        # resources if necessary
+                        self._handle_validation_for_resource(context, resource)
 
-                _run_async_validation(resource_id)
+            else:
+                # This is a resource
+                resource_id = data_dict[u'id']
+
+                if resource_id in self.resources_to_validate:
+                    for plugin in p.PluginImplementations(IDataValidation):
+                        if not plugin.can_validate(context, data_dict):
+                            log.debug('Skipping validation for resource %s', data_dict['id'])
+                            return
+
+                    del self.resources_to_validate[resource_id]
+
+                    _run_async_validation(resource_id)
 
     # IPackageController
 
